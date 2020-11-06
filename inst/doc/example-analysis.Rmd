@@ -1,0 +1,324 @@
+---
+title: "Examples of using eventglm and interpreting the results"
+output: rmarkdown::html_vignette
+bibliography: refs.bib
+vignette: >
+  %\VignetteIndexEntry{Examples of using eventglm and interpreting the results}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>", 
+  fig.width = 7, fig.height = 4.75
+)
+```
+
+```{r setup}
+library(survival)
+library(eventglm)
+```
+
+# Colon cancer treatment and time to death (standard survival)
+
+Our first example concerns the `colon` dataset, which is included in the package: 
+
+```{r, eval = FALSE}
+?eventglm::colon
+```
+
+This is a randomized trial, so the main interest is in comparing the distributions of time to death between the three treatment arms. Let's start with a survival curve. 
+
+```{r}
+sfit <- survfit(Surv(time, status) ~ rx, data = colon)
+plot(sfit, col = c("black", "slateblue", "salmon"), 
+     xlab = "days since registration", ylab = "survival")
+legend("bottomleft", fill = c("black", "slateblue", "salmon"), 
+       legend = names(sfit$strata))
+```
+
+As we know, hazard ratios are difficult to interpret as causal effects, even in randomized controlled trials. Better options for summarizing the effect of treatment are the survival at a particular time, or the restricted mean survival up to a given time. Let's compare the survival at 7 years, or about 2500 days since registration. 
+
+```{r}
+plot(sfit[1], conf.int = FALSE, xlab = "days since registration", ylab = "survival")
+
+seg0 <- summary(sfit[1], times = sfit[1]$time[sfit[1]$time <= 2500])
+rect(c(0, seg0$time), 0, c(seg0$time, 2500), c(seg0$surv), 
+     border = NA, col = "grey80")
+lines(sfit[1], conf.int = FALSE)
+abline(v = 2500, lty = 2)
+points(x = 2500, y = summary(sfit[1], times = 2500)$surv)
+
+```
+
+In the figure above, we plot only the survival curve in the observation group. The vertical dotted line is at the time of interest (tmax = 2500 days). The open point is at the estimated survival probability at time tmax, i.e., $P(T > tmax)$ and the shaded area represents the restricted mean survival up to tmax, i.e., $E\{\min(T, tmax)\} = \int_0^{tmax} P(T > u) \, du$. We can estimate these things using the `survival` package: 
+
+```{r}
+colon.sfit <- summary(sfit, times = 2500, rmean = 2500)
+colon.sfit
+```
+
+And we can now do inference using the `eventglm` package. First, we fit a regression model for the cumulative incidence, or 1 - survival:  
+
+```{r}
+colon.cifit <- cumincglm(Surv(time, status) ~ rx, time = 2500, data = colon)
+summary(colon.cifit)
+se.ci <- sqrt(diag(vcov(colon.cifit, type = "robust")))
+b.ci <- colon.cifit$coefficients
+conf.ci <- confint(colon.cifit)
+```
+We find that compared to observation alone, the Levamisole alone treatment group has a `r round(b.ci[2], 2)` difference in the cumulative incidence of death at 2500 days, with 95\% confidence interval `r round(conf.ci[2,], 2)`, while the Levamisole plus 5-FU group has a `r round(b.ci[3], 2)` difference in the cumulative incidence of death at 2500 days, with 95\% confidence interval `r round(conf.ci[3,], 2)`. This roughly agrees with the Kaplan-Meier estimates from survfit above: 
+
+```{r}
+cbind(eventglm = b.ci, 
+      survfit = c(1 - colon.sfit$surv[1], 
+  (1 - colon.sfit$surv[2:3]) - 
+    (1 - rep(colon.sfit$surv[1], 2))))
+```
+
+We can fit another model using the log link to obtain estimates of the log relative risks comparing the active treatment arms to the observation arm: 
+
+```{r}
+colon.rr <- cumincglm(Surv(time, status) ~ rx, time = 2500, 
+                      data = colon, link = "log")
+br.ci <- colon.rr$coefficients
+confr.ci <- confint(colon.rr)
+```
+
+We find that the estimated probability of death before 2500 days in the Levamisole alone arm is `r round(exp(br.ci[2]), 2)` times lower compared to observation with 95\% confidence interval `r round(exp(confr.ci[2,]), 2)` and the estimated probability of death before 2500 days in the Levamisole+5FU arm is `r round(exp(br.ci[3]), 2)` times lower compared to observation with 95\% confidence interval `r round(exp(confr.ci[3, ]), 2)`. If odds ratios are of interest, then the `link = "logit"` option can be used instead. Another interesting option is the `link = "cloglog"`: the complementary log log link for the cumulative incidence implies proportional hazards. Thus models using the cloglog link applied at various time points can be used to assess the proportional hazards assumption [@perme2008checking]. Other options for link functions are probit, inverse, $\mu^{-2}$, square root, and users can define custom link function. It is not immediately clear what the interpretation of the regression coefficients would be in these cases, but they are possible. See the `stats::family` help file for more details. 
+
+
+Now for the restricted mean: 
+```{r}
+colon.rmfit <- rmeanglm(Surv(time, status) ~ rx, time = 2500, data = colon)
+summary(colon.rmfit)
+se.rm <- sqrt(diag(vcov(colon.rmfit, type = "robust")))
+b.rm <- colon.rmfit$coefficients
+conf.rm <- confint(colon.rmfit)
+```
+We find that compared to observation alone, the Levamisole alone treatment group has a `r round(b.rm[2], 2)` difference in the mean time to death up to 2500 days, with 95\% confidence interval `r round(conf.rm[2,], 2)`, while the Levamisole plus 5-FU group has a `r round(b.rm[3], 2)` difference in the mean time to death up to 2500 days, with 95\% confidence interval `r round(conf.rm[3,], 2)`. Again, this roughly agrees with the Kaplan-Meier estimates from survfit above:
+
+```{r}
+cbind(eventglm = b.rm, 
+      survfit = c(colon.sfit$table[1, 5], 
+colon.sfit$table[2:3, 5] - colon.sfit$table[1, 5]))
+
+```
+
+A key advantage of the regression approach is that it gives us the ability to adjust or model other covariates. In this example, since it is a randomized trial, we know that all covariates are independent of treatment assignment. However, several variables are associated with time to death, so in this case they would be called "precision variables". We would expect that adjusting for age, or the number of positive lymph nodes (more than 4) in the above models would reduce the standard error estimates of the treatment effects, without changing the coefficient estimates. Let's find out: 
+
+```{r}
+colon.ci.adj <- cumincglm(Surv(time, status) ~ rx + age + node4, time = 2500, data = colon)
+colon.rm.adj <- rmeanglm(Surv(time, status) ~ rx + age + node4, time = 2500, data = colon)
+summary(colon.rm.adj)
+```
+
+The estimates don't change (much) and the standard errors reduce by about 5\%. 
+
+# Monoclonal gammopathy data (Competing risks)
+
+Our next example involves the `mgus2` dataset, included in the package: 
+
+```{r, eval = 2}
+?mgus2
+head(mgus2)
+```
+
+This dataset has a number of covariates, and the time until progression to plasma cell malignancy (PCM), or death. Here the event PCM is of primary interest, with death being a competing event. The data are described and analyzed in the survival vignette (section 2.3.2): 
+
+```{r}
+crfit <- survfit(Surv(etime, event) ~ sex, eventglm::mgus2)
+summary(crfit, times = 120)
+print(crfit, rmean = 120)
+
+plot(crfit, col=1:2,  noplot="",
+     lty=c(3,3,2,2,1,1), lwd=2, xscale=12,
+     xlab="Years post diagnosis", ylab="P(state)")
+legend(240, .65, c("Female, death", "Male, death", "malignancy", "(s0)"),
+       lty=c(1,1,2,3), col=c(1,2,1,1), bty='n', lwd=2)
+abline(v = 120, lty = 2)
+```
+
+We can get similar estimates for the cumulative incidence of pcm at 10 years and the expected lifetime lost due to pcm up to 10 years with similar commands as above. Note the `cause` option to specify the cause of interest.
+
+```{r}
+mgfitci <- cumincglm(Surv(etime, event) ~ sex, cause = "pcm", time = 120, 
+                   data = mgus2)
+summary(mgfitci)
+
+mgfitrmean <- rmeanglm(Surv(etime, event) ~ sex, cause = "pcm", time = 120, 
+                       data = mgus2)
+summary(mgfitrmean)
+```
+
+Sex may be an important predictor of time to pcm, what about the other variables? 
+
+```{r}
+mgfitci2 <- cumincglm(Surv(etime, event) ~ sex + age + hgb, cause = "pcm", 
+                      time = 120, data = mgus2)
+mgfitrmean2 <- rmeanglm(Surv(etime, event) ~ sex + age + hgb, cause = "pcm", 
+                      time = 120, data = mgus2)
+summary(mgfitrmean2)
+```
+
+The objects returned by `cumincglm` and `rmeanglm` inherit from `glm`, so many methods are available. First, the `vcov` function has several options for calculation of the estimated variance of the estimated regression parameters. By default, the `robust` variance estimates are used, based on the Huber-White estimator. Other options are naive, and corrected, which are the corrected estimators suggested by @overgaard2017asymptotic which are based on a second order Von-Mises expansion. We can also use the bootstrap. This recalculated the pseudo-observations every time, but it is still pretty fast because of the C code. Let's compare:
+
+```{r}
+nboot <- 100 # use a bigger number for real
+bootests <- matrix(NA, nrow = nboot, ncol = 4)
+for(i in 1:nboot) {
+  mgus.b <- mgus2[sample(1:nrow(mgus2), replace = TRUE), ]
+  mgfitrmean.b <- rmeanglm(Surv(etime, event) ~ sex + age + hgb, cause = "pcm", 
+                      time = 120, data = mgus.b)
+  bootests[i,] <- mgfitrmean.b$coefficients
+}
+
+se.boot <- sqrt(diag(cov(bootests)))
+knitr::kable(cbind(se.boot = se.boot, 
+      se.robust = sqrt(diag(vcov(mgfitrmean2))), 
+      #se.corrected = sqrt(diag(vcov(mgfitrmean2, type = "corrected"))), 
+      se.naive = sqrt(diag(vcov(mgfitrmean2, type = "naive")))), digits = 3)
+
+```
+
+The corrected estimator fails pretty often, because it doesn't handle ties, and the benefits are negligible, and thus may be removed from the package in the future. 
+
+Residuals also work, using the scaling factor suggested by @perme2008checking, as do predictions. Predicted restricted means give a possible method to predict individual event times, while the predicted cumulative incidence should be probabilities. Note that with the identity link, the predicted cumulative incidence is not guaranteed to be between 0 and 1. 
+
+```{r}
+hist(predict(mgfitrmean2, newdata = mgus2), 
+     xlab = "Predicted lifetime lost due to PCM", main = "")
+
+mgus2$prob.pcm10 <- predict(mgfitci2, newdata = mgus2)
+mgus2$pseudo.ci <- mgfitci$y
+summary(mgus2$prob.pcm10)
+cutps <- quantile(mgus2$prob.pcm10, seq(.1, .9, by = .1), na.rm = TRUE)
+mgus2$prob.cut <- cut(mgus2$prob.pcm10, 
+                      cutps)
+
+pred.p <- cutps[-length(cutps)] + diff(cutps)
+obs.p <- c(by(mgus2$pseudo.ci, mgus2$prob.cut, mean))
+
+plot(obs.p ~ pred.p, xlab = "predicted", ylab = "observed")
+abline(0, 1)
+```
+
+# Censoring assumptions
+
+By default, we assume that time to censoring is independent of the time to the event, and of all covariates in the model. This is more restrictive than parametric survival models, or Cox regression, which only assumes that censoring time is conditionally independent of event time given the covariates in the model. We provide several options to relax that assumption using the `model.censoring` and `formula.censoring` options. The first is to compute stratified pseudo observations, which assumes that the censoring is independent given a set of categorical covariates: 
+
+```{r}
+colon.ci.cen1 <- cumincglm(Surv(time, status) ~ rx + age + node4, time = 2500, 
+                           data = colon, model.censoring = "stratified", 
+                           formula.censoring = ~ rx)
+```
+
+Next, we can assume that the time to censoring follows a Cox model given a set of covariates. By default, the same covariate formula (right hand side) as the main model is used, but any formula can be specified. We can also use Aalens additive hazards model instead of a Cox model for the censoring distribution. Then inverse probability of censoring weighted pseudo observations are used [@overgaard2019pseudo]. According to our simulation study, the stratified option works quite well even when the censoring model is misspecified, and the Aalen additive model tends to work better than the Cox model. 
+
+```{r}
+colon.ci.cen2 <- cumincglm(Surv(time, status) ~ rx + age + node4, time = 2500, 
+                           data = colon, model.censoring = "coxph", 
+                           formula.censoring = ~ rx + age + node4)
+colon.ci.cen3 <- cumincglm(Surv(time, status) ~ rx + age + node4, time = 2500, 
+                           data = colon, model.censoring = "aareg", 
+                           formula.censoring = ~ rx + age + node4)
+
+knitr::kable(cbind("indep" = colon.ci.adj$coefficients, 
+      "strat" = colon.ci.cen1$coefficients, 
+      "coxipcw" = colon.ci.cen2$coefficients, 
+      "aalenipcw" = colon.ci.cen3$coefficients), digits = 3)
+```
+
+# Relative survival/net survival
+
+Following Professor Paul Lambert's example here: https://pclambert.net/software/stpp/using_stpp/ , let's load the datasets:
+
+```{r}
+library(data.table)
+
+# from https://pclambert.net/data/colon.dta
+colon2 <- rio::import(system.file("extdata", "colon.dta", package = "eventglm"))
+colon2$surv_mm_trunc <- ifelse(colon2$surv_mm > 120.5, 120.5, colon2$surv_mm)
+
+colon2$death <- colon2$status %in% c(1, 2)
+colon2$death[colon2$surv_mm > colon2$surv_mm_trunc] <- 0
+
+# from https://pclambert.net/data/popmort.dta
+lifetab <- data.table(rio::import(system.file("extdata", "popmort.dta", package = "eventglm")))
+```
+
+Now we will estimate the marginal relative survival using the approach described in @pavlivc2019using, which is based on the estimator: 
+
+$$
+RS(t) = n^{-1}\sum_{i = 1}^n\frac{PO_i(t)}{S_{P}(t | D)}, 
+$$
+
+where $S_{P}(t | D)$ is the survival probability based on the life tables for the demographics $D$ of patient $i$, and $PO_i(t)$ are the pseudo observations for time $t$. We get the survival probability by merging with the life table estimates, and the pseudo observations from our package. The `prob` from the life tables is the probability of surviving one year, so to get the probability of surviving 5 and 10 years, we need to calculate the cumulative product estimates. 
+
+```{r}
+
+lifetab[, prob.5 := prod(lifetab[`_age` %in% .BY[["_age"]]:(.BY[["_age"]]+4) & 
+                              `_year` %in% .BY[["_year"]]:(.BY[["_year"]]+4) & 
+                                `_year` == .BY[["_year"]] - .BY[["_age"]] + `_age` &
+                              sex == .BY[["sex"]] ]$prob, na.rm = TRUE), 
+        by = c("sex", "_year", "_age")]
+
+lifetab[, prob.10 := prod(lifetab[`_age` %in% .BY[["_age"]]:(.BY[["_age"]]+9) & 
+                              `_year` %in% .BY[["_year"]]:(.BY[["_year"]]+9) & 
+                                `_year` == .BY[["_year"]] - .BY[["_age"]] + `_age` &
+                              sex == .BY[["sex"]] ]$prob, na.rm = TRUE), 
+        by = c("sex", "_year", "_age")]
+
+
+colon2 <- merge(colon2, lifetab, 
+                by.x = c("sex", "yydx", "age"), 
+                by.y = c("sex",  "_year", "_age"), all.x = TRUE, all.y = FALSE)
+
+fit1 <- cumincglm(survival::Surv(surv_mm_trunc, death) ~ 1, data = colon2, time = 1 * 12)
+fit5 <- cumincglm(survival::Surv(surv_mm_trunc, death) ~ 1, data = colon2, time = 5 * 12)
+fit10 <- cumincglm(survival::Surv(surv_mm_trunc, death) ~ 1, data = colon2, time = 10 * 12)
+
+colon2$po_1 <- 1 - fit1$y
+colon2$po_5 <- 1 - fit5$y
+colon2$po_10 <- 1 - fit10$y
+
+knitr::kable(cbind(time = c(1, 5, 10), 
+                   relsurv.pseudo = with(colon2, 
+                                  c(mean(po_1 / prob), 
+                                    mean(po_5 / prob.5), 
+                                    mean(po_10 / prob.10)),
+                                  ),
+                   relsurv.pohar = c(0.682, 0.479, 0.441)), digits = 3)
+```
+
+They are pretty close to those computed using the Pohar Perme estimator reported by Prof Lambert.
+
+# Case cohort sampling
+
+@parner2020cumulative describe how to fit regression models with pseudo-observations that account for case-cohort sampling. The basic idea is weighted estimating equations, which we can implement easily with the `weights` argument that gets passed to `glm.fit`. First let's create a case-cohort sample of the `colon2` dataset by sampling the cancer deaths (`status == 1`) with probability 0.8, and a random subcohort with probability 0.1.
+
+```{r}
+colon2$status2 <- factor(ifelse(colon2$status == 4, 0, colon2$status), 
+                         labels = c("censored", "cancer death", "other death"))
+subc <- rbinom(nrow(colon2), size = 1, p = .2)
+samp.ind <- subc + (1 - subc) * (colon2$status == 1) * rbinom(nrow(colon2), size = 1, p = .9)
+colon.cc <- colon2[as.logical(samp.ind), ]
+colon.cc$samp.wt <- 1 / ifelse(colon.cc$status == 1, .2 + .8 * .9, .2)
+```
+
+Now, the weighted regression model should give similar results as the unweighted one in the full sample: 
+
+```{r}
+cfit.cc <- cumincglm(Surv(surv_mm, status2) ~ age + sex + factor(subsite), 
+                     cause = "cancer death", time = 5 * 12, data = colon.cc, 
+                     weights = samp.wt)
+cfit.full <- cumincglm(Surv(surv_mm, status2) ~ age + sex + factor(subsite), 
+                     cause = "cancer death", time = 5 * 12, data = colon2)
+knitr::kable(cbind(casecohort = cfit.cc$coefficients, 
+      fullsamp = cfit.full$coefficients), digits = 2)
+```
+
+
+# References
