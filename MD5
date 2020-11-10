@@ -1,6 +1,6 @@
-f32c868f7bdb5f0f53305774cd09ac6a *DESCRIPTION
+c3058a479003aa76787b8e45b9069489 *DESCRIPTION
 96dad0318a1f842197f617f0370114b3 *NAMESPACE
-02d5ae366ca6c170804f0c14169b0b47 *NEWS.md
+c289359503d2ebfaf03cebdb96758991 *NEWS.md
 fc0f93fb73ae012ac1d389a6e2ce7806 *R/datasets.R
 e49793896aaef4a278775bac989fd5b4 *R/event-model-fit.R
 309ab935bae41637b1d5a570f7eb32be *R/eventglm-package.R
@@ -13,7 +13,7 @@ e5865a4f77003bbfedba506fcec7055d *data/colon.rda
 0933297e80033fa3ea4494362e976a1f *data/mgus2.rda
 5a83261aa26558f543a7fd7372167cd1 *inst/doc/example-analysis.R
 3a467221d7f7dfe7ff4065ab4ce91fd5 *inst/doc/example-analysis.Rmd
-35052db2d42f84d5db03df06dfc7eb9e *inst/doc/example-analysis.html
+378c44786e6cff4c5e85c643a31b6284 *inst/doc/example-analysis.html
 933837304bdcc28b64866c4a0ffb92f6 *inst/extdata/colon.dta
 98cc0d64ea2d7b7ebe488b26ccc1e794 *inst/extdata/popmort.dta
 20fcf076d6b89a0522a001680dd58e59 *man/colon.Rd
@@ -39,7 +39,7 @@ d5702a1df745e8dab3d1700384b7bb84 *man/vcov.pseudoglm.Rd
 5e36ceb22cb65a6e6998bb7c409df0cc *src/init.c
 11ce6b8f527b80df99c28de2c7e9c440 *src/loo.c
 a604fe4155293344c1e7a39f5ecb9e74 *tests/testthat.R
-0d55d361994eed368be3fc6438623734 *tests/testthat/test-jackknife-agree.R
+15bdeb4ade3d93ef59c7e2f91ece4577 *tests/testthat/test-jackknife-agree.R
 d4a346f1d3d5fd8571926318a43783d5 *tests/testthat/test-model-fit.R
 3a467221d7f7dfe7ff4065ab4ce91fd5 *vignettes/example-analysis.Rmd
 30a9647661a15deeb764d388f9264d32 *vignettes/refs.bib
