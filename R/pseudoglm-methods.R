@@ -9,10 +9,21 @@
 #'
 print.pseudoglm <- function (x, digits = max(3L, getOption("digits") - 3L), ...)
 {
-    outcome <- switch(x$type, rmean = "restricted mean", cuminc = "cumulative incidence")
+    outcome <- switch(x$type, rmean = "restricted mean",
+                      cuminc = "cumulative incidence",
+                      survival = "survival")
+    junc <- "of"
+    if(outcome == "restricted mean" & x$competing) {
+        outcome <- "restricted mean time lost"
+        junc <- "due to"
+    }
     cat("\nCall:  ", paste(deparse(x$call), sep = "\n",
                            collapse = "\n"), "\n\n", sep = "")
-    cat("\nModel for the", x$link, outcome, "of cause", x$cause, "at time", x$time, "\n\n")
+    if(x$competing) {
+        cat("\nModel for the", x$link, outcome, junc, "cause", x$cause, "at time", x$time, "\n\n")
+    } else {
+        cat("\nModel for the", x$link, outcome, "at time", x$time, "\n\n")
+    }
     if (length(coef(x))) {
         cat("Coefficients")
         if (is.character(co <- x$contrasts))
@@ -40,16 +51,17 @@ print.pseudoglm <- function (x, digits = max(3L, getOption("digits") - 3L), ...)
 #'   \link{rmeanglm}.
 #' @param type The method to use for variance estimation; one of "corrected",
 #'   "robust", "naive", or "cluster"
-#' @param ... Arguments passed to \link[sandwich]{vcovHC}
+#' @param ... Not used
 #' @return A numeric matrix containing the variance-covariance estimates
 #'
-#' @details The "corrected" variance estimate is as described in Overgaard et
-#'   al. (2017) <doi:10.1214/16-AOS1516>, with code adapted from Overgaard's
-#'   Stata program. This method does not handle ties and only has
-#'   marginal benefits in reasonable sample sizes. The default is "robust" which
-#'   uses a sandwich estimator as implemented in the sandwich package. "cluster"
-#'   is another option if you have clustered observations. Finally "naive" uses
-#'   the same method as glm to compute the variance, and is known to be
+#' @details The "corrected" variance estimate for the cumulative incidence is as
+#'   described in Overgaard et al. (2017) <doi:10.1214/16-AOS1516>, with code
+#'   adapted from Overgaard's Stata program. This method does not handle ties
+#'   and only has marginal benefits in reasonable sample sizes. The default is
+#'   "robust" which uses the sandwich estimator vcovHC as implemented in the
+#'   sandwich package. "cluster" is another option if you have clustered
+#'   observations that uses the vcovCL function in sandwich. Finally "naive"
+#'   uses the same method as glm to compute the variance, and is known to be
 #'   anti-conservative. The bootstrap is another recommended option that can be
 #'   implemented using other tools; there is an example in the vignette.
 #'
@@ -57,11 +69,26 @@ print.pseudoglm <- function (x, digits = max(3L, getOption("digits") - 3L), ...)
 #'   Asymptotic theory of generalized estimating equations based on jack-knife
 #'   pseudo-observations. Ann. Statist. 45 (2017), no. 5, 1988--2015.
 #'   <doi:10.1214/16-AOS1516>.
-#' @seealso \link[sandwich]{vcovHC}
+#' @seealso \link[sandwich]{vcovHC}, \link[sandwich]{vcovCL}
 #' @export
 vcov.pseudoglm <- function(object, type = "robust", ...) {
 
+    if(length(object$time) > 1) {
+        if(type != "robust") {
+            message("Only robust variance estimate available for multiple time points.")
+        }
+        return(object$sandcov)
+    }
+
     if(type == "corrected") {
+
+        if(!object$type %in% c("cuminc", "survival")) {
+            stop("Corrected variance estimator not available for", object$type)
+        }
+
+        if(length(object$time) > 1) {
+            stop("Corrected variance estimator not available for multiple time points.")
+        }
 
         if(is.null(object$x)) {
             stop("Corrected variance requires 'x = TRUE' in the model fit.")
@@ -77,6 +104,7 @@ vcov.pseudoglm <- function(object, type = "robust", ...) {
         if(any(table(datain[, 1]) > 1)) {
             stop("Corrected variance not available when there are tied event times")
         }
+
 
         len2 <- nrow(datain)
 
@@ -131,20 +159,20 @@ vcov.pseudoglm <- function(object, type = "robust", ...) {
                         cumsum(H_0_dif * (F_1[n_times] - F_1) * Lambda_0_dif_comp_inv * H_lag_inv^2)[times_nr] ,
                     rep(-sum(H_0_dif * (F_1[n_times] - F_1) * Lambda_0_dif_comp_inv * H_lag_inv^2), noobs-len2))
 
-        beta = object$coefficients
+        beta = coefficients(object)
         k = length(beta)
 
         z = object$x[datord,]  ## what if the model contains po at multiple time points?
 
-        muhat = object$family$linkinv(z %*% beta)
-        Ahat = z * as.vector(object$family$mu.eta(z %*% beta))
+        linpred <- z %*% beta
+        muhat = object$family$linkinv(linpred)
+        Ahat <- mu_derivhat <- z * as.vector(object$family$mu.eta(linpred))
         Ahat_red = Ahat[1:len2,]
-        mu_derivhat = z * as.vector(object$family$mu.eta(z %*% beta))
 
         a_len <- a1_len <- a2_len <- a3_len <-
             b_1 <- b_2 <- b_3 <- b_4 <- b_5 <- b_6 <-
-            matrix(NA, nrow = noobs, ncol = k)
-        H_0z <- H_0z_dif <- H_1z <- H_1z_dif <- H_z <- H_z_lag <- matrix(NA, nrow = len2, ncol = k)
+            matrix(numeric(length = noobs * k), nrow = noobs, ncol = k)
+        H_0z <- H_0z_dif <- H_1z <- H_1z_dif <- H_z <- H_z_lag <- matrix(numeric(len2 * k), nrow = len2, ncol = k)
 
 
         ## compute variance
@@ -206,16 +234,14 @@ vcov.pseudoglm <- function(object, type = "robust", ...) {
         Sigma <- t(a_len) %*% a_len / noobs + t(a_len) %*% b / noobs +
             t(b) %*% a_len / noobs + t(b) %*% b / noobs
 
-
-        Minvhat <- solve(t(Ahat) %*% mu_derivhat / nrow(Ahat))
-
+        Minvhat <- chol2inv(chol(t(Ahat) %*% mu_derivhat / nrow(Ahat)))
         Minvhat %*% Sigma %*% t(Minvhat) / noobs
 
 
     } else if(type == "robust") {
 
         class(object) <- c("glm", "lm")
-        sandwich::vcovHC(object, ...)
+        sandwich::vcovHC(object)
 
     } else if(type == "naive") {
 
@@ -226,7 +252,7 @@ vcov.pseudoglm <- function(object, type = "robust", ...) {
     } else if(type == "cluster") {
 
         class(object) <- c("glm", "lm")
-        sandwich::vcovCL(object, cluster = object$cluster.id, ...)
+        sandwich::vcovCL(object, cluster = object$cluster.id)
 
     } else stop("unknown variance type")
 
@@ -239,7 +265,7 @@ vcov.pseudoglm <- function(object, type = "robust", ...) {
 #' @param correlation logical; if TRUE, the correlation matrix of the estimated parameters is returned and printed.
 #' @param symbolic.cor logical; If TRUE, print the correlations in a symbolic form rather than as numbers.
 #' @param type The method to use for variance estimation; one of "corrected", "robust", "naive", or "cluster"
-#' @param ... Additional arguments passed to \link{vcov.pseudoglm}
+#' @param ... Not used
 #' @return An object of class \link[stats]{summary.glm}
 #' @export
 #'

@@ -1,4 +1,3 @@
-[![Lifecycle: stable](https://img.shields.io/badge/lifecycle-stable-green.svg)](https://www.tidyverse.org/lifecycle/#stable)
 [![CRAN Status](https://www.r-pkg.org/badges/version/eventglm)](https://cran.r-project.org/package=eventglm)
 [![Travis build status](https://travis-ci.org/sachsmc/eventglm.svg?branch=master)](https://travis-ci.org/sachsmc/eventglm)
 
@@ -30,10 +29,10 @@ library(eventglm)
 colon.cifit <- cumincglm(Surv(time, status) ~ rx, time = 2500, data = colon)
 summary(colon.cifit)
 se.ci <- sqrt(diag(vcov(colon.cifit, type = "robust")))
-b.ci <- colon.cifit$coefficients
+b.ci <- coefficients(colon.cifit)
 ```
 
-Check out the vignette for more examples.
+Check out the vignettes for more examples and details.
 
 ## References
 

@@ -38,7 +38,7 @@ colon.sfit
 colon.cifit <- cumincglm(Surv(time, status) ~ rx, time = 2500, data = colon)
 summary(colon.cifit)
 se.ci <- sqrt(diag(vcov(colon.cifit, type = "robust")))
-b.ci <- colon.cifit$coefficients
+b.ci <- coefficients(colon.cifit)
 conf.ci <- confint(colon.cifit)
 
 ## -----------------------------------------------------------------------------
@@ -50,14 +50,14 @@ cbind(eventglm = b.ci,
 ## -----------------------------------------------------------------------------
 colon.rr <- cumincglm(Surv(time, status) ~ rx, time = 2500, 
                       data = colon, link = "log")
-br.ci <- colon.rr$coefficients
+br.ci <- coefficients(colon.rr)
 confr.ci <- confint(colon.rr)
 
 ## -----------------------------------------------------------------------------
 colon.rmfit <- rmeanglm(Surv(time, status) ~ rx, time = 2500, data = colon)
 summary(colon.rmfit)
 se.rm <- sqrt(diag(vcov(colon.rmfit, type = "robust")))
-b.rm <- colon.rmfit$coefficients
+b.rm <- coefficients(colon.rmfit)
 conf.rm <- confint(colon.rmfit)
 
 ## -----------------------------------------------------------------------------
@@ -70,6 +70,56 @@ colon.sfit$table[2:3, 5] - colon.sfit$table[1, 5]))
 colon.ci.adj <- cumincglm(Surv(time, status) ~ rx + age + node4, time = 2500, data = colon)
 colon.rm.adj <- rmeanglm(Surv(time, status) ~ rx + age + node4, time = 2500, data = colon)
 summary(colon.rm.adj)
+
+## -----------------------------------------------------------------------------
+cumincglm(Surv(time, status) ~ rx, time = 2500, 
+                      data = colon, survival = TRUE)
+
+## -----------------------------------------------------------------------------
+mvtfit1 <- cumincglm(Surv(time, status) ~ rx, 
+        time = c(500, 1000, 1500, 2000, 2500),
+        data = colon, survival = TRUE)
+summary(mvtfit1)
+
+## -----------------------------------------------------------------------------
+mvtfit2 <- cumincglm(Surv(time, status) ~ tve(rx), 
+        time = c(500, 1000, 1500, 2000, 2500),
+        data = colon, survival = TRUE)
+summary(mvtfit2)
+
+## -----------------------------------------------------------------------------
+round(summary(mvtfit2)$coefficients[13,, drop = FALSE],2)
+
+## -----------------------------------------------------------------------------
+round(summary(sfit, times = 1500)$surv[3] - 
+  summary(sfit, times = 1500)$surv[1], 2)
+
+## -----------------------------------------------------------------------------
+colon.ci.cen1 <- cumincglm(Surv(time, status) ~ rx + age + node4, time = 2500, 
+                           data = colon, model.censoring = "stratified", 
+                           formula.censoring = ~ rx)
+
+## -----------------------------------------------------------------------------
+colon.ci.cen2 <- cumincglm(Surv(time, status) ~ rx + age + node4, time = 2500, 
+                           data = colon, model.censoring = "coxph", 
+                           formula.censoring = ~ rx + age + node4)
+colon.ci.cen3 <- cumincglm(Surv(time, status) ~ rx + age + node4, time = 2500, 
+                           data = colon, model.censoring = "aareg", 
+                           formula.censoring = ~ rx + age + node4)
+
+round(cbind("indep" = coef(colon.ci.adj),
+  "strat" = coef(colon.ci.cen1),
+  "coxipcw" = coef(colon.ci.cen2),
+  "aalenipcw" = coef(colon.ci.cen3)), 3)
+
+## -----------------------------------------------------------------------------
+colon.ci.cen2b <- cumincglm(Surv(time, status) ~ rx + age + node4, 
+                            time = c(500, 1000, 2500), 
+                           data = colon, model.censoring = "coxph", 
+                           formula.censoring = ~ rx + age + node4)
+
+head(colon.ci.cen2b$ipcw.weights)
+summary(colon.ci.cen2b$ipcw.weights)
 
 ## ---- eval = 2----------------------------------------------------------------
 ?mgus2
@@ -110,7 +160,7 @@ for(i in 1:nboot) {
   mgus.b <- mgus2[sample(1:nrow(mgus2), replace = TRUE), ]
   mgfitrmean.b <- rmeanglm(Surv(etime, event) ~ sex + age + hgb, cause = "pcm", 
                       time = 120, data = mgus.b)
-  bootests[i,] <- mgfitrmean.b$coefficients
+  bootests[i,] <- coefficients(mgfitrmean.b)
 }
 
 se.boot <- sqrt(diag(cov(bootests)))
@@ -136,24 +186,6 @@ obs.p <- c(by(mgus2$pseudo.ci, mgus2$prob.cut, mean))
 
 plot(obs.p ~ pred.p, xlab = "predicted", ylab = "observed")
 abline(0, 1)
-
-## -----------------------------------------------------------------------------
-colon.ci.cen1 <- cumincglm(Surv(time, status) ~ rx + age + node4, time = 2500, 
-                           data = colon, model.censoring = "stratified", 
-                           formula.censoring = ~ rx)
-
-## -----------------------------------------------------------------------------
-colon.ci.cen2 <- cumincglm(Surv(time, status) ~ rx + age + node4, time = 2500, 
-                           data = colon, model.censoring = "coxph", 
-                           formula.censoring = ~ rx + age + node4)
-colon.ci.cen3 <- cumincglm(Surv(time, status) ~ rx + age + node4, time = 2500, 
-                           data = colon, model.censoring = "aareg", 
-                           formula.censoring = ~ rx + age + node4)
-
-knitr::kable(cbind("indep" = colon.ci.adj$coefficients, 
-      "strat" = colon.ci.cen1$coefficients, 
-      "coxipcw" = colon.ci.cen2$coefficients, 
-      "aalenipcw" = colon.ci.cen3$coefficients), digits = 3)
 
 ## -----------------------------------------------------------------------------
 library(data.table)
@@ -217,6 +249,6 @@ cfit.cc <- cumincglm(Surv(surv_mm, status2) ~ age + sex + factor(subsite),
                      weights = samp.wt)
 cfit.full <- cumincglm(Surv(surv_mm, status2) ~ age + sex + factor(subsite), 
                      cause = "cancer death", time = 5 * 12, data = colon2)
-knitr::kable(cbind(casecohort = cfit.cc$coefficients, 
-      fullsamp = cfit.full$coefficients), digits = 2)
+knitr::kable(cbind(casecohort = coefficients(cfit.cc), 
+      fullsamp = coefficients(cfit.full)), digits = 2)
 

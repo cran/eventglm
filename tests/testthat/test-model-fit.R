@@ -90,3 +90,109 @@ test_that("ipcw works", {
     expect_true(all(sqrt(diag(vcov(rmeanipcw1, type = "robust"))) > 0))
 
 })
+
+
+test_that("variable names clash", {
+
+    colon$pseudo.vals <- colon$surg
+    colon$.Tci <- colon$surg
+    colon$.Ci <- colon$surg
+
+    goodest <- cumincglm(Surv(time, status) ~ rx + surg, time = 2500, data = colon)
+    clash <- cumincglm(Surv(time, status) ~ rx + pseudo.vals, time = 2500, data = colon)
+
+    expect_equal(unname(coef(goodest)), unname(coef(clash)))
+
+    good2 <- cumincglm(Surv(time, status) ~ rx, time = 2500, data = colon,
+                       model.censoring = "coxph", formula.censoring = ~ surg)
+    clash2 <- cumincglm(Surv(time, status) ~ rx, time = 2500, data = colon,
+                        model.censoring = "coxph", formula.censoring = ~ .Tci)
+
+    expect_equal(unname(coef(good2)), unname(coef(clash2)))
+
+    good3 <- cumincglm(Surv(time, status) ~ rx, time = 2500, data = colon,
+                       model.censoring = "aareg", formula.censoring = ~ surg)
+    clash3 <- cumincglm(Surv(time, status) ~ rx, time = 2500, data = colon,
+                        model.censoring = "aareg", formula.censoring = ~ .Tci)
+
+    expect_equal(unname(coef(good3)), unname(coef(clash3)))
+
+})
+
+
+test_that("Multiple times work", {
+
+    cuminctest <- cumincglm(Surv(etime, event) ~ 1,
+                            time = c(50, 100, 200), cause = "pcm", link = "identity", data = mgus2)
+    stest <- survival::survfit(Surv(etime, event) ~ 1, data = mgus2)
+    stab <- summary(stest, times = c(50, 100, 200))
+
+    expect_lt(sum(coef(cuminctest)[1] + c(0, coef(cuminctest)[-1]) - stab$pstate[, 2]), 1e-6)
+
+    cuminctest2 <- cumincglm(Surv(etime, event) ~ tve(sex),
+                            time = c(50, 100, 200), cause = "pcm", link = "identity", data = mgus2)
+    stest2 <- survival::survfit(Surv(etime, event) ~ sex, data = mgus2)
+    stab2 <- summary(stest2, times = c(50, 100, 200))
+    survests <- stab2$pstate[4:6, 2] - stab2$pstate[1:3, 2]
+    expect_lt(sum(coef(cuminctest2)[4:6] - survests), 1e-4)
+
+})
+
+
+test_that("Glm features work", {
+
+    set.seed(202105)
+    colonx <- colon
+    colonx$www <- runif(nrow(colonx))
+    colonx$ooo <- rnorm(nrow(colonx))
+
+    fitbas <- cumincglm(Surv(time, status) ~ rx, time = 2500, data = colonx,
+                        model.censoring = "independent", formula.censoring = ~ surg)
+    fit1 <- cumincglm(Surv(time, status) ~ rx + offset(ooo), time = 2500, data = colonx,
+              model.censoring = "independent", formula.censoring = ~ surg)
+    fit1b <- cumincglm(Surv(time, status) ~ rx, time = 2500, data = colonx,
+                       offset = ooo,
+                      model.censoring = "independent", formula.censoring = ~ surg)
+
+    expect_true(!is.null(fit1$offset))
+    expect_true(sum(abs(fitbas$coefficients - fit1$coefficients)) > .1)
+    expect_true(sum(abs(fit1b$coefficients - fit1$coefficients)) < 1e-6)
+
+
+    fit2 <- cumincglm(Surv(time, status) ~ rx, time = 2500, data = colonx,
+                      weights = www,
+                      model.censoring = "independent", formula.censoring = ~ surg)
+
+    expect_true(all(fit2$weights != 1))
+    expect_true(sum(abs(fitbas$coefficients - fit2$coefficients)) > .05)
+
+    #multitime
+
+    fitbas <- cumincglm(Surv(time, status) ~ tve(rx), time = c(500, 1000, 2500), data = colonx,
+                        model.censoring = "independent", formula.censoring = ~ surg)
+
+    fit1 <- cumincglm(Surv(time, status) ~ tve(rx) + offset(ooo), time = c(500, 1000, 2500), data = colonx,
+                      model.censoring = "independent", formula.censoring = ~ surg)
+
+    fit1b <- cumincglm(Surv(time, status) ~ tve(rx), time =  c(500, 1000, 2500), data = colonx,
+                       offset = ooo,
+                       model.censoring = "independent", formula.censoring = ~ surg)
+
+    expect_true(!is.null(fit1$offset))
+    expect_true(sum(abs(fitbas$coefficients - fit1$coefficients)) > .05)
+    expect_true(sum(abs(fit1b$coefficients - fit1$coefficients)) > .1)
+
+
+    fit2 <- cumincglm(Surv(time, status) ~ tve(rx), time =  c(500, 1000, 2500), data = colonx,
+                      weights = www,
+                      model.censoring = "independent", formula.censoring = ~ surg)
+
+    expect_true(all(fit2$weights != 1))
+    expect_true(sum(abs(fitbas$coefficients - fit2$coefficients)) > .05)
+
+    fitbass <- cumincglm(Surv(time, status) ~ tve(rx), time = c(500, 1000, 2500), data = colonx,
+                        model.censoring = "independent", survival = TRUE, formula.censoring = ~ surg)
+
+
+})
+

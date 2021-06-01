@@ -122,4 +122,141 @@ pseudo_rmst2 <- function(sfit, jacks, times, tmax, type = "cuminc") {
 }
 
 
+#' Compute inverse probability of censoring weights pseudo observations
+#'
+#' @param mr Model response object returned by \link{Surv}
+#' @param time Max time
+#' @param causen Cause of interest (numeric)
+#' @param type Outcome type, "cuminc", "survival", or "rmean"
+#' @param ipcw.method "binder" or "hajek"
+#' @param Gi vector of estimated censoring probabilities
 
+calc_ipcw_pos <- function(mr, time, causen, type, ipcw.method, Gi) {
+    stopifnot(length(Gi) == nrow(mr))
+
+    if (type == "cuminc") {
+        Vi <- as.numeric(mr[, "time"] < time & mr[, "status"] == causen)
+
+    } else if (type == "survival") {
+        if (attr(mr, "type") != "right") {
+            stop(
+                "Survival estimand not available for outcome with censoring type",
+                attr(mr, "type")
+            )
+        }
+
+        Vi <-
+            1 - as.numeric(mr[, "time"] < time & mr[, "status"] == causen)
+
+    } else if (type == "rmean") {
+        if (attr(mr, "type") == "mright") {
+            Vi <-
+                (time - pmin(mr[, "time"], time)) * as.numeric(mr[, "status"] == causen)
+
+        } else {
+            Vi <- pmin(mr[, "time"], time)
+
+        }
+    }
+
+    Ii <- as.numeric(mr[, "time"] >= time | mr[, "status"] != 0)
+
+    nn <- length(Vi)
+    theta.n <- sum(Ii * Vi / Gi) / sum(Ii / Gi)
+
+    XXi <- Vi * Ii / Gi
+    if (ipcw.method == "binder") {
+        POi <-
+            theta.n + (nn - 1) * (theta.n - sapply(1:length(XXi), function(i)
+                mean(XXi[-i])))
+
+
+    } else if (ipcw.method == "hajek") {
+        POi <- nn * theta.n - (nn - 1) *
+            (sapply(1:length(XXi), function(i)
+                sum(XXi[-i]) / sum(Ii[-i] / Gi[-i])))
+
+
+    } else {
+        stop(
+            "Weighting method ",
+            ipcw.method,
+            " not available, options are 'binder' or 'hajek'"
+        )
+    }
+
+    POi
+}
+
+
+#' Match cause specification against model response
+#'
+#' @param mr model.response as returned by \link{Surv}
+#' @param cause Numeric or string indicating the cause of interest
+#'
+
+match_cause <- function(mr, cause) {
+    if (!is.null(attr(mr, "states"))) {
+        states <- attr(mr, "states")
+        if (is.numeric(cause)) {
+            stopifnot(cause <= length(states))
+            causec <- states[cause]
+            causen <- cause
+        } else {
+            stopifnot(length(match(cause, states)) > 0)
+            causen <- match(cause, states)[1]
+            causec <- cause
+        }
+    } else {
+        causen <- 1
+        causec <- "dead"
+    }
+    list(causen = causen, causec = causec)
+
+}
+
+
+#' Error check censoring model
+#'
+#' Censoring model must take the same named arguments as the predefined modules
+#' (though they do not all have to be used), and return a vector of pseudo observations.
+#'
+#' @param model.censoring censoring model specification as character or function
+#'
+
+check_mod_cens <- function(model.censoring) {
+
+
+    if(is.character(model.censoring)) {
+        pseudo_function <- tryCatch(get(paste0("pseudo_", model.censoring),
+                                        mode = "function", envir = parent.frame()),
+                                    error = function(e) NULL)
+
+        if(is.null(pseudo_function)) { # try without the pseudo prefix
+            pseudo_function <- get(model.censoring,
+                                   mode = "function", envir = parent.frame())
+        }
+    } else if(is.function(model.censoring)) {
+        pseudo_function <- model.censoring
+    } else {
+        stop("invalid model.censoring, it should be a function or name of a function")
+    }
+
+    needargs <- c("formula", "time", "cause", "data", "type",
+                  "formula.censoring", "ipcw.method")
+
+    stopifnot(length(names(formals(pseudo_function))) == length(needargs))
+
+    check_pseudo_function <- names(formals(pseudo_function)) == needargs
+
+    if(!all(check_pseudo_function)) {
+
+        missargs <- c("formula", "time", "cause", "data", "type",
+                      "formula.censoring", "ipcw.method")[!check_pseudo_function]
+        stop("Arguments ", paste(missargs, collapse = ", "), " are missing from given model.censoring function")
+
+    }
+
+    pseudo_function
+
+}
