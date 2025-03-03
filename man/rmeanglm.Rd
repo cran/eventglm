@@ -23,6 +23,7 @@ rmeanglm(
   y = TRUE,
   singular.ok = TRUE,
   contrasts = NULL,
+  id,
   ...
 )
 }
@@ -57,7 +58,8 @@ the model. Can also be a custom function, see Details and the
 
 \item{formula.censoring}{A one sided formula (e.g., \code{~ x1 + x2})
 specifying the model for the censoring distribution. If NULL, uses the same
-mean model as for the outcome.}
+mean model as for the outcome. Missing values in any covariates for the
+censoring model will cause an error.}
 
 \item{ipcw.method}{Which method to use for calculation of inverse
 probability of censoring weighted pseudo observations. "binder" the
@@ -103,6 +105,11 @@ components of the returned value.}
 \item{contrasts}{an optional list. See the contrasts.arg of
 \link[stats]{model.matrix.default}.}
 
+\item{id}{An optional integer vector of subject identifiers, found in data.
+If this is present, then generalized estimating equations will be used
+to fit the model. This can be used, for example, if there are multiple
+observations per individual represented as multiple rows in data.}
+
 \item{...}{Other arguments passed to \link[stats]{glm.fit}}
 }
 \value{
@@ -130,11 +137,11 @@ calculations. For examples of the implementation, see the "pseudo-modules.R"
 file, or the vignette "Extending eventglm".
 }
 \examples{
-    cumincipcw <- rmeanglm(Surv(etime, event) ~ age + sex,
+    rmeanipcw <- rmeanglm(Surv(etime, event) ~ age + sex,
          time = 200, cause = "pcm", link = "identity",
          model.censoring = "independent", data = mgus2)
 # stratified on only the categorical covariate
-     cumincipcw2 <- rmeanglm(Surv(etime, event) ~ age + sex,
+     rmeanipcw2 <- rmeanglm(Surv(etime, event) ~ age + sex,
                          time = 200, cause = "pcm", link = "identity",
                          model.censoring = "stratified",
                          formula.censoring = ~ sex, data = mgus2)

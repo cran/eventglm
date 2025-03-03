@@ -89,6 +89,27 @@ test_that("ipcw works", {
     expect_true(all(sqrt(diag(vcov(rmeanipcw1, type = "naive"))) > 0))
     expect_true(all(sqrt(diag(vcov(rmeanipcw1, type = "robust"))) > 0))
 
+    mgus2$age[1:20] <- NA
+
+    expect_error(cumincglm(Surv(etime, event) ~ age + sex,
+                             time = 200, cause = "pcm", link = "identity",
+                             model.censoring = "coxph",
+                             data = mgus2))
+
+    expect_error(cumincglm(Surv(etime, event) ~ age + sex,
+                           time = 200, cause = "pcm", link = "identity",
+                           model.censoring = "aareg",
+                           data = mgus2))
+
+    mgus2$sex[1:20] <- NA
+    expect_error(cumincglm(Surv(etime, event) ~ sex,
+                           time = 200, cause = "pcm", link = "identity",
+                           model.censoring = "stratified",
+                           formula.censoring = ~ sex,
+                           data = mgus2))
+
+
+
 })
 
 
@@ -138,6 +159,50 @@ test_that("Multiple times work", {
 
 })
 
+test_that("Missing data", {
+
+  cuminctest <- cumincglm(Surv(etime, event) ~ hgb + creat + sex,
+                   time = c(50, 100, 200), cause = "pcm", link = "identity", data = mgus2)
+
+  expect_lt(cuminctest$df.residual, nrow(mgus2) * 3)
+
+  cuminctest <- cumincglm(Surv(etime, event) ~ hgb + creat + sex,
+                          time = c(50), cause = "pcm", link = "identity", data = mgus2)
+
+  expect_lt(cuminctest$df.residual, nrow(mgus2))
+
+  mgus2$idtest <- 1:nrow(mgus2)
+
+  rmeantest <- rmeanglm(Surv(etime, event) ~ hgb + creat + sex,
+                          time = c(50), cause = "pcm", link = "identity", data = mgus2,
+                        id = idtest)
+  expect_lt(rmeantest$df.residual, nrow(mgus2))
+
+
+})
+
+
+
+test_that("Clustered data works", {
+
+  cuminctest <- cumincglm(Surv(etime, event) ~ 1,
+                          time = c(50, 100, 200), cause = "pcm", link = "identity",
+                          id = id, data = mgus2)
+  stest <- survival::survfit(Surv(etime, event) ~ 1, data = mgus2)
+  stab <- summary(stest, times = c(50, 100, 200))
+
+  expect_lt(sum(coef(cuminctest)[1] + c(0, coef(cuminctest)[-1]) - stab$pstate[, 2]), 1e-6)
+
+  cuminctest2 <- cumincglm(Surv(stop, event) ~ tve(rx), time = c(10, 25),
+                           link = "identity", id = id, data = survival::bladder)
+  rmeantest2 <- rmeanglm(Surv(stop, event) ~ rx, time = 25,
+                           link = "identity", id = id, data = survival::bladder)
+
+  expect_true(rmeantest2$method == "geese")
+
+
+})
+
 
 test_that("Glm features work", {
 
@@ -171,7 +236,8 @@ test_that("Glm features work", {
     fitbas <- cumincglm(Surv(time, status) ~ tve(rx), time = c(500, 1000, 2500), data = colonx,
                         model.censoring = "independent", formula.censoring = ~ surg)
 
-    fit1 <- cumincglm(Surv(time, status) ~ tve(rx) + offset(ooo), time = c(500, 1000, 2500), data = colonx,
+    fit1 <- cumincglm(Surv(time, status) ~ tve(rx) + offset(ooo),
+                      time = c(500, 1000, 2500), data = colonx,
                       model.censoring = "independent", formula.censoring = ~ surg)
 
     fit1b <- cumincglm(Surv(time, status) ~ tve(rx), time =  c(500, 1000, 2500), data = colonx,
@@ -180,7 +246,7 @@ test_that("Glm features work", {
 
     expect_true(!is.null(fit1$offset))
     expect_true(sum(abs(fitbas$coefficients - fit1$coefficients)) > .05)
-    expect_true(sum(abs(fit1b$coefficients - fit1$coefficients)) > .1)
+    expect_true(sum(abs(fit1b$coefficients - fit1$coefficients)) < .01)
 
 
     fit2 <- cumincglm(Surv(time, status) ~ tve(rx), time =  c(500, 1000, 2500), data = colonx,
@@ -196,3 +262,97 @@ test_that("Glm features work", {
 
 })
 
+
+
+test_that("Left truncation and infjack", {
+
+  library(survival)
+  mdata <- tmerge(myeloid[!is.na(myeloid$crtime),1:2], myeloid[!is.na(myeloid$crtime),],
+                  id=id, death= event(futime, death),
+                  cr = event(crtime)
+                  )
+
+  mdata <- mdata[mdata$cr == 0,]
+
+  sfit <- survfit(Surv(tstart, tstop, death) ~ trt, data = mdata,
+                  influence = 1)
+
+  sfitm <- summary(sfit, times = c(750))
+
+  tinf <- cumincglm(Surv(tstart, tstop, death) ~ trt, data = mdata,
+                    time = 750, model.censoring = "infjack", survival = TRUE)
+
+  expect_true(abs(diff(sfitm$surv) - tinf$coefficients[2]) < .005)
+
+
+  cuminctest <- cumincglm(Surv(time, status) ~ rx, 1500, cause = 1,
+                          data = colon, survival = TRUE,
+                          model.censoring = "stratified",
+                          formula.censoring = ~ sex)
+
+  cuminctest2 <- cumincglm(Surv(time, status) ~ rx, 1500, cause = 1,
+                          data = colon, survival = TRUE,
+                          model.censoring = "infjack",
+                          formula.censoring = ~ sex)
+
+
+  expect_true(mean(abs(cuminctest$coefficients - cuminctest2$coefficients)) < .01)
+
+
+  cuminctest <- cumincglm(Surv(time, status) ~ rx, 1500, cause = 1,
+                          data = colon, survival = TRUE,
+                          model.censoring = "independent")
+
+  cuminctest2 <- cumincglm(Surv(time, status) ~ rx, 1500, cause = 1,
+                           data = colon, survival = TRUE,
+                           model.censoring = "infjack",
+                           formula.censoring = ~ 1)
+
+
+  expect_true(mean(abs(cuminctest$coefficients - cuminctest2$coefficients)) < .005)
+
+
+  cuminctest <- cumincglm(Surv(time, status) ~ rx, 1500, cause = 1,
+                          data = colon, survival = FALSE,
+                          model.censoring = "independent")
+
+  cuminctest2 <- cumincglm(Surv(time, status) ~ rx, 1500, cause = 1,
+                           data = colon, survival = FALSE,
+                           model.censoring = "infjack",
+                           formula.censoring = ~ 1)
+
+
+  expect_true(mean(abs(cuminctest$coefficients - cuminctest2$coefficients)) < .005)
+
+})
+
+
+test_that("extension after last time", {
+
+  set.seed(11) # it does not always, but quite occasionally happen, so I cherry-picked a seed. set.seed(11) does not reproduce the error, so it might work a second look.
+  library(eventglm)
+
+  arm <- sample(c('A', 'B'), 1000, replace=T)
+  ev <- sample(c('Event', 'Cen', 'Comrisk'), 1000, replace=T) #competing-risk
+  ttev <- rweibull(1000, 1, 1)  # time to event
+  ttev <- ifelse(arm=='A' & ev=="Event", pmin(ttev, 2), ttev) # cens everyone of arm A and event "Event" as 2
+  ttev <- ifelse(arm=='A' & ev!='Event', pmin(ttev, 1.8), ttev) # cens everyone else of arm A at 1.8. to ensure that 2 is last observed time for arm A and that is the event of interest.
+
+  dt <- data.frame(arm=arm, ev=factor(ev, levels=c('Cen', 'Event', 'Comrisk')), ttev=ttev)
+
+  expect_no_error(
+    {
+      prev.err <- rmeanglm(Surv(ttev,ev, type='mstate')~arm, time = 6, cause = 'Event', model.censoring = 'stratified',
+           formula.censoring = ~ arm,
+           data=dt) # Error in stats::glm.fit(X, Y, weights = weights, family = quasi(link = link,  : NA/NaN/Inf in 'y'
+    }
+  )
+
+  # dt[dt$ev == "Event",][1, "ttev"] <- 0
+  # dt[dt$ev == "Comrisk",][1, "ttev"] <- -1
+  # dt[dt$ev == "Cen",][1, "ttev"] <- -.001
+  # fit <- rmeanglm(Surv(ttev,ev, type='mstate')~arm, time = 2, cause = 'Event', model.censoring = 'stratified',
+  #          formula.censoring = ~ arm,
+  #          data=dt)
+
+})

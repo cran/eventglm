@@ -1,4 +1,4 @@
-## ---- include = FALSE---------------------------------------------------------
+## ----include = FALSE----------------------------------------------------------
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>", 
@@ -9,7 +9,7 @@ knitr::opts_chunk$set(
 library(survival)
 library(eventglm)
 
-## ---- eval = FALSE------------------------------------------------------------
+## ----eval = FALSE-------------------------------------------------------------
 #  ?eventglm::colon
 
 ## -----------------------------------------------------------------------------
@@ -121,7 +121,7 @@ colon.ci.cen2b <- cumincglm(Surv(time, status) ~ rx + age + node4,
 head(colon.ci.cen2b$ipcw.weights)
 summary(colon.ci.cen2b$ipcw.weights)
 
-## ---- eval = 2----------------------------------------------------------------
+## ----eval = 2-----------------------------------------------------------------
 ?mgus2
 head(mgus2)
 
@@ -240,7 +240,8 @@ colon2$status2 <- factor(ifelse(colon2$status == 4, 0, colon2$status),
                          labels = c("censored", "cancer death", "other death"))
 subc <- rbinom(nrow(colon2), size = 1, p = .2)
 samp.ind <- subc + (1 - subc) * (colon2$status == 1) * rbinom(nrow(colon2), size = 1, p = .9)
-colon.cc <- colon2[as.logical(samp.ind), ]
+colon.cc <- colon2
+colon.cc[!as.logical(samp.ind), c("age", "sex", "subsite")] <- NA
 colon.cc$samp.wt <- 1 / ifelse(colon.cc$status == 1, .2 + .8 * .9, .2)
 
 ## -----------------------------------------------------------------------------
@@ -250,5 +251,9 @@ cfit.cc <- cumincglm(Surv(surv_mm, status2) ~ age + sex + factor(subsite),
 cfit.full <- cumincglm(Surv(surv_mm, status2) ~ age + sex + factor(subsite), 
                      cause = "cancer death", time = 5 * 12, data = colon2)
 knitr::kable(cbind(casecohort = coefficients(cfit.cc), 
-      fullsamp = coefficients(cfit.full)), digits = 2)
+      fullsamp = coefficients(cfit.full)), digits = 3)
+
+## -----------------------------------------------------------------------------
+cfit.cc$rawPO |> mean()
+cfit.full$rawPO |> mean()
 

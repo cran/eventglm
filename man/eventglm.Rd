@@ -2,6 +2,7 @@
 % Please edit documentation in R/eventglm-package.R
 \docType{package}
 \name{eventglm}
+\alias{eventglm-package}
 \alias{eventglm}
 \title{Regression Models for Event History Outcomes}
 \description{
@@ -14,4 +15,28 @@ variance estimation.
 }
 \references{
 Sachs MC, Gabriel EE (2022). "Event History Regression with Pseudo-Observations: Computational Approaches and an Implementation in R." Journal of Statistical Software, 102(9), 1-34. <doi:10.18637/jss.v102.i09>
+}
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://sachsmc.github.io/eventglm/}
+  \item Report bugs at \url{https://github.com/sachsmc/eventglm/issues/}
+}
+
+}
+\author{
+\strong{Maintainer}: Michael C Sachs \email{sachsmc@gmail.com}
+
+Authors:
+\itemize{
+  \item Erin E Gabriel
+}
+
+Other contributors:
+\itemize{
+  \item Morten Overgaard (Corrected variance calculation) [contributor]
+  \item Thomas A Gerds (Fast computation of leave one out cumulative incidence) [contributor]
+  \item Terry Therneau (Restricted mean computation) [contributor]
+}
+
 }

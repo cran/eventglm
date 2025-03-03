@@ -1,4 +1,4 @@
-## ---- include = FALSE---------------------------------------------------------
+## ----include = FALSE----------------------------------------------------------
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
@@ -52,13 +52,13 @@ fitdef <- cumincglm(Surv(time, status) ~ rx + sex + age, time = 2500,
 knitr::kable(sapply(list(parametric = fitpara, default = fitdef), 
        coefficients))
 
-## ---- eval = FALSE------------------------------------------------------------
+## ----eval = FALSE-------------------------------------------------------------
 #  fit1 <- cumincglm(Surv(time, status) ~ rx + sex + age, time = 2500,
 #                    model.censoring = "parametric",
 #                    data = colon)
 
 ## -----------------------------------------------------------------------------
-pseudo_infjack <- function(formula, time, cause = 1, data,
+pseudo_infjack2 <- function(formula, time, cause = 1, data,
                         type = c("cuminc", "survival", "rmean"),
                         formula.censoring = NULL, ipcw.method = NULL) {
   
@@ -73,7 +73,7 @@ pseudo_infjack <- function(formula, time, cause = 1, data,
      ## S(t) + (n)[S(t) -S_{-i}(t)]
      POi <- matrix(pstate, nrow = marginal.estimate2$n, ncol = length(time), byrow = TRUE) +
          (marginal.estimate2$n) *
-         (marginal.estimate2$influence.surv[, tdex + 1])
+         (marginal.estimate2$influence.surv[, tdex])
      
      POi
 
@@ -81,7 +81,7 @@ pseudo_infjack <- function(formula, time, cause = 1, data,
 
 ## -----------------------------------------------------------------------------
 fitinf <- cumincglm(Surv(time, status) ~ rx + sex + age, time = 2500, 
-                  model.censoring = "infjack", 
+                  model.censoring = "infjack2", 
                   data = colon)
 
 fitdefsurv <- cumincglm(Surv(time, status) ~ rx + sex + age, time = 2500, 

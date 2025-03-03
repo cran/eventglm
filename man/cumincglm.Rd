@@ -24,6 +24,7 @@ cumincglm(
   y = TRUE,
   singular.ok = TRUE,
   contrasts = NULL,
+  id,
   ...
 )
 }
@@ -61,7 +62,8 @@ eventglm" vignette.}
 
 \item{formula.censoring}{A one sided formula (e.g., \code{~ x1 + x2})
 specifying the model for the censoring distribution. If NULL, uses the same
-mean model as for the outcome.}
+mean model as for the outcome. Missing values in any covariates for the
+censoring model will cause an error.}
 
 \item{ipcw.method}{Which method to use for calculation of inverse probability
 of censoring weighted pseudo observations. "binder" the default, uses the
@@ -74,7 +76,7 @@ the sum of the weights as the denominator.}
 incidence) as the outcome. Not available for competing risks models.}
 
 \item{weights}{an optional vector of 'prior weights' to be used in the
-fitting process. Should be NULL or a numeric vector.}
+fitting process. Should be NULL or a numeric vector found in data.}
 
 \item{subset}{an optional vector specifying a subset of observations to be
 used in the fitting process.}
@@ -110,6 +112,11 @@ components of the returned value.}
 
 \item{contrasts}{an optional list. See the contrasts.arg of
 \link[stats]{model.matrix.default}.}
+
+\item{id}{An optional integer vector of subject identifiers, found in data.
+If this is present, then generalized estimating equations will be used
+to fit the model. This can be used, for example, if there are multiple
+observations per individual represented as multiple rows in data.}
 
 \item{...}{Other arguments passed to \link[stats]{glm.fit}}
 }

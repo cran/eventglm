@@ -1,7 +1,4 @@
 [![CRAN Status](https://www.r-pkg.org/badges/version/eventglm)](https://cran.r-project.org/package=eventglm)
-[![Travis build status](https://travis-ci.org/sachsmc/eventglm.svg?branch=master)](https://travis-ci.org/sachsmc/eventglm)
-
-
 
 # eventglm: Regression Models for Event History Outcomes
 
@@ -14,8 +11,9 @@ This package is in stable development. The interface is unlikely to have major c
 
 ## Installation
 
-```{r}
+```r
 install.packages("eventglm")
+## or
 remotes::install_github("sachsmc/eventglm")
 ```
 
@@ -23,7 +21,7 @@ remotes::install_github("sachsmc/eventglm")
 
 The main functions users will use are `cumincglm` and `rmeanglm`. These are generalized linear regression models for the cumulative incidence and restricted mean of a censored time to event outcome, with or without competing risks. The models are specified just like `glm`, but the outcome must be a call to `Surv` (like in `coxph`), and you must specify the `time` argument (the fixed time at which the cumulative incidence or restricted mean is computed).
 
-```{r}
+```r
 library(eventglm)
 
 colon.cifit <- cumincglm(Surv(time, status) ~ rx, time = 2500, data = colon)
